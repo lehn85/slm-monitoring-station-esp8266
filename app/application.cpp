@@ -47,13 +47,20 @@ const int A0min = 4;
 const int A0max = 1024;
 const float r1 = 1000;
 const float r2 = 100;
+const float panel_area = 1800e-6;//m2
 
-float volt1 = 0;
-float power1 = 0;
-float volt2 = 0;
-float power2 = 0;
-float voltm = 0;
-float powerm = 0;
+struct sensordata {
+	float temp = 0;
+	float humid = 0;
+	float volt1 = 0;
+	float miliwatt1 = 0;
+	float volt2 = 0;
+	float miliwatt2 = 0;
+	float voltm = 0;
+	float miliwattm = 0;
+	float watt_per_m2 = 0;
+};
+sensordata data;
 
 void initSensorSolar() {
 	pinMode(SWITCH_LOAD_1, OUTPUT);
@@ -71,9 +78,9 @@ void prepareReadSolar1() {
 
 void readSolar1() {
 	int rawA0 = analogRead(A0);
-	volt1 = 3.3f*(rawA0 - A0min) / (A0max - A0min);
-	power1 = volt1*volt1 / r1 * 1000;
-	debugf("Read solar panel (load=1kohm): rawA0=%d, volt=%0.2f V, power=%0.2f mW", rawA0, volt1, power1);
+	data.volt1 = 3.3f*(rawA0 - A0min) / (A0max - A0min);
+	data.miliwatt1 = data.volt1*data.volt1 / r1 * 1000;
+	debugf("Read solar panel (load=1kohm): rawA0=%d, volt=%0.2f V, power=%0.2f mW", rawA0, data.volt1, data.miliwatt1);
 	prepareReadSolar2();
 }
 
@@ -86,20 +93,24 @@ void prepareReadSolar2() {
 
 void readSolar2() {
 	int rawA0 = analogRead(A0);
-	volt2 = 3.3f*(rawA0 - A0min) / (A0max - A0min);
-	power2 = volt2*volt2 / r2 * 1000;
-	debugf("Read solar panel (load=100ohm): rawA0=%d, volt=%0.2f V, power=%0.2f mW", rawA0, volt2, power2);
+	data.volt2 = 3.3f*(rawA0 - A0min) / (A0max - A0min);
+	data.miliwatt2 = data.volt2*data.volt2 / r2 * 1000;
+	debugf("Read solar panel (load=100ohm): rawA0=%d, volt=%0.2f V, power=%0.2f mW", rawA0, data.volt2, data.miliwatt2);
 
 	// assuming characteristic solar panel is linear
 	// interpolate to find the point that provide maximum output power
-	float i1 = volt1 / r1;
-	float i2 = volt2 / r2;
-	float m = (volt1 == volt2) ? 1e10f : ((i1 - i2) / (volt1 - volt2));
-	float um = 0.5*(volt1 - i1 / m);
-	float im = (i1 + m*(um - volt1)) * 1000;//mA
-	voltm = um;
-	powerm = um*im;
-	debugf("For Pmax, volt=%0.2f V, im=%0.2f mA, load = %0.2f, Pmax=%0.2f", voltm, im, voltm / im * 1000, powerm);
+	float i1 = data.volt1 / r1;
+	float i2 = data.volt2 / r2;
+	float m = 0, um = 0, im = 0;
+	if (data.volt1 != data.volt2) {
+		m = (i1 - i2) / (data.volt1 - data.volt2);
+		um = 0.5*(data.volt1 - i1 / m);//V
+		im = i1 + m*(um - data.volt1);//A
+	}
+	data.voltm = um;
+	data.miliwattm = um*im * 1000;//*1000 to convert to miliwatt
+	data.watt_per_m2 = data.miliwattm / panel_area / 1000;// /1000 to convert to watt
+	debugf("For Pmax, volt=%0.2f V, im=%0.2f mA, load = %0.2f, Pmax=%0.2f", data.voltm, im, data.voltm / im, data.miliwattm);
 
 	readHT();
 
@@ -109,14 +120,25 @@ void readSolar2() {
 TempAndHumidity th;
 void readHT() {
 	debugf("Read HT sensor");
-	if (dht.readTempAndHumidity(th))
+
+	int trycount = 0;
+	bool success = false;
+
+	do {
+		success = dht.readTempAndHumidity(th);
+	} while (!success && (++trycount < 5));
+
+	if (success)
 	{
 		debugf("Humidity: %0.2f \%, Temprature: %0.2f *C\r\n", th.humid, th.temp);
+		data.temp = th.temp;
+		data.humid = th.humid;
+		// all read, publish
 		publishSensor();
 	}
 	else
 	{
-		debugf("Failed to read from DHT: %d", dht.getLastError());		
+		debugf("Failed to read from DHT: %d, after %d tries", dht.getLastError(), trycount);
 		System.deepSleep(DELAY_RECONNECT);
 	}
 }
@@ -133,14 +155,24 @@ void readSensor() {
 
 // publish data to mqtt broker, which should be connected while measuring sensor data
 void publishSensor() {
-	//send to mqtt		
-	String msg = "field1=" + String(th.temp) + "&field2=" + String(th.humid)
-		+ "&field3=" + String(volt1) + "&field4=" + String(power1, 2)
-		+ "&field5=" + String(volt2) + "&field6=" + String(power2, 2)
-		+ "&field7=" + String(voltm) + "&field8=" + String(powerm, 2);
+	//send to mqtt broker (local) as JSON
+	StaticJsonBuffer<500> jsonBuffer;
+	JsonObject& root = jsonBuffer.createObject();
+	root.set("temp", data.temp, 8);
+	root.set("humid", data.humid, 8);
+	root.set("volt1", data.volt1, 8);
+	root.set("miliwatt1", data.miliwatt1, 8);
+	root.set("volt2", data.volt1, 8);
+	root.set("miliwatt2", data.miliwatt2, 8);
+	root.set("voltm", data.voltm, 8);
+	root.set("miliwattm", data.miliwattm, 8);
+	root.set("watt_per_m2", data.watt_per_m2, 8);
+
+	String msg;
+	root.printTo(msg);	
 	// if mqtt broker is connected, publish message
 	if (mqtt->getConnectionState() == eTCS_Connected) {
-		mqtt->publishMessage(MQTT_TOPIC, msg);		
+		mqtt->publishMessage(MQTT_TOPIC, msg);
 	}
 	else { //else-> sleep, try again or try start		
 #ifdef USE_DEEPSLEEP
@@ -152,19 +184,19 @@ void publishSensor() {
 			return;
 		}
 		// retry so many time, retry after a while
-		else {			
+		else {
 			debugf("Mqtt broker not connected, go to deep sleep for 60s ");
-			System.deepSleep(DELAY_RECONNECT, eDSO_RF_CAL_BY_INIT_DATA);			
+			System.deepSleep(DELAY_RECONNECT, eDSO_RF_CAL_BY_INIT_DATA);
 		}
 #else
 		debugf("Mqtt is not connected, now retrying ...");
 		mqtt->start();//auto reconnect
 		readSensor();//10s to read sensor and publish (hopefully in 10s mqtt is connected)
 #endif // USE_DEEPSLEEP						
-	}
+		}
 
-	
-}
+
+	}
 
 void onMQTTSent() {
 #ifdef USE_DEEPSLEEP
