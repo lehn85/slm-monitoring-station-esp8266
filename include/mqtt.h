@@ -2,7 +2,7 @@
 
 typedef Delegate<void()> MQTTOnSent;
 
-// thinkspeak.com client
+// MQTT client to local Mosquitto broker
 class MyMQTTClient : public MqttClient {
 
 	// ... and/or MQTT username and password

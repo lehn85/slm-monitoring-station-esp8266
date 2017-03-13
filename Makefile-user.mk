@@ -2,6 +2,13 @@
 ## Parameters configured here will override default and ENV values.
 ## Uncomment and change examples:
 
+## memory mapping customize
+MAIN_OFFSET ?= 0x00000
+MAIN_CAP ?= 524288
+SDK_OFFSET ?= 0x80000
+SPI_SIZE = 4M
+LD_SCRIPT = rom.ld
+
 ## Add your source directories here separated by space
 # MODULES = app
 # EXTRA_INCDIR = include
@@ -28,11 +35,16 @@
 # COM_PORT = /dev/tty.usbserial
 
 ## Com port speed
-# COM_SPEED	= 115200
+# com speed for download tool
+COM_SPEED_ESPTOOL	= 921600
+# com speed for code
+COM_SPEED_SERIAL = 115200
 
 ## Configure flash parameters (for ESP12-E and other new boards):
-# SPI_MODE = dio
+SPI_MODE = dio
 
 ## SPIFFS options
-DISABLE_SPIFFS = 1
-# SPIFF_FILES = files
+#DISABLE_SPIFFS = 1
+SPIFF_FILES = web/build
+SPIFF_START_OFFSET = 0x100000
+SPIFF_SIZE     = 196608

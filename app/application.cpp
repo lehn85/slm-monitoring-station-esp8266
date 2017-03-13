@@ -1,7 +1,13 @@
 ﻿#include <user_config.h>
 #include <SmingCore/SmingCore.h>
+#include <SmingCore/Debug.h>
 #include <Libraries/DHT/DHT.h>
 #include <mqtt.h>
+#include <network_setup.h>
+
+// spiff file system location, same as in Makefile-user.mk
+#define SPIFF_START_OFFSET 0x100000
+#define SPIFF_SIZE 196608
 
 //#define LED_PIN 16
 void ledOnOff(bool on) {
@@ -17,13 +23,19 @@ void ledOnOff(bool on) {
 #define DELAY_RECONNECT 50*1000
 #define DELAY_FOR_STABLIZING_SOLAR_PANEL 5000
 
-#define DHT_SENSOR_PIN 14 // GPIO14
+#define DHT_SENSOR_PIN 14 // D5 GPIO14
 
 // If you want, you can define WiFi settings globally in Eclipse Environment Variables
 #ifndef WIFI_SSID
 #define WIFI_SSID "" // Put you SSID and Password here
 #define WIFI_PWD ""
 #endif
+
+#ifndef API_WRITE_KEY
+#define API_WRITE_KEY "key-to-access-nodejs-webserver"
+#endif // !API_WRITE_KEY
+
+#define SETUP_PIN 12 //D6 - GPIO12
 
 DHT dht(DHT_SENSOR_PIN);
 Timer timerReadSensor;
@@ -169,7 +181,7 @@ void publishSensor() {
 	root.set("watt_per_m2", data.watt_per_m2, 8);
 
 	String msg;
-	root.printTo(msg);	
+	root.printTo(msg);
 	// if mqtt broker is connected, publish message
 	if (mqtt->getConnectionState() == eTCS_Connected) {
 		mqtt->publishMessage(MQTT_TOPIC, msg);
@@ -193,10 +205,10 @@ void publishSensor() {
 		mqtt->start();//auto reconnect
 		readSensor();//10s to read sensor and publish (hopefully in 10s mqtt is connected)
 #endif // USE_DEEPSLEEP						
-		}
-
-
 	}
+
+
+}
 
 void onMQTTSent() {
 #ifdef USE_DEEPSLEEP
@@ -236,17 +248,31 @@ void STAGotIP(IPAddress ip, IPAddress mask, IPAddress gateway)
 
 void init()
 {
+	//spiffs_mount(); // Mount file system, in order to work with files
+    // mount manually (same as to makefile-user.mk) 0x40200000 is address start of SPI flash for esp8266
+	spiffs_mount_manual(0x40200000 + SPIFF_START_OFFSET, SPIFF_SIZE);
+
 	Serial.begin(SERIAL_BAUD_RATE); // 115200 by default
 	Serial.systemDebugOutput(true); // Allow debug output to serial
 
 	debugf("Initializing...");
+
+	// check if need to enter setup mode
+	pinMode(SETUP_PIN, INPUT);
+	if (digitalRead(SETUP_PIN)) {
+		debugf("Goto STA mode for setup");
+		initSTAmode();
+		return;
+	}
+
+	// otherwise: normal operation
 
 	initSensorSolar();
 
 	// led
 #ifdef  LED_PIN
 	pinMode(LED_PIN, OUTPUT);
-#endif //  LED_PIN
+#endif //  LED_PIN	
 
 	// disable access point for now
 	WifiAccessPoint.enable(false);
@@ -267,11 +293,13 @@ void init()
 	mqtt->setMqttOnSentListener(onMQTTSent);//when sent to mqtt broker successfully
 
 	//connect to wifi
-	WifiStation.enable(true);
-	WifiStation.config(WIFI_SSID, WIFI_PWD, true, true);
-	// static ip if needed
-	WifiStation.setIP(IPAddress(10, 1, 10, 198), IPAddress(255, 255, 255, 0), IPAddress(10, 1, 10, 1));
-	// events
+	//WifiStation.enable(true);
+	//WifiStation.config(WIFI_SSID, WIFI_PWD, true, true);
+	//// static ip if needed
+	//WifiStation.setIP(IPAddress(10, 1, 10, 198), IPAddress(255, 255, 255, 0), IPAddress(10, 1, 10, 1));
+	// load settings and start
+	startWifiStationFromSettings();
+	// events when connected
 	WifiEvents.onStationGotIP(STAGotIP);
 
 	//time out if cannot connect to AP

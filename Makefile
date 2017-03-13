@@ -3,7 +3,10 @@
 #####################################################################
 # Including user Makefile.
 # Should be used to set project-specific parameters
-include ./Makefile-user.mk
+-include ./Makefile-user.mk
+
+# Include confidential data like password wifi, which is not included for push to git
+-include ./Makefile-private-var.mk
 
 # Important parameters check.
 # We need to make sure SMING_HOME and ESP_HOME variables are set.
