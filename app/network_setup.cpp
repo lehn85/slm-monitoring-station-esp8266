@@ -5,7 +5,7 @@
 #include <AppSettings.h>
 
 HttpServer server;
-//FTPServer ftp;
+FTPServer ftp;
 
 BssList networks;
 String network, password;
@@ -163,20 +163,20 @@ void startWebServer()
 	server.setDefaultHandler(onFile);
 }
 
-//void startFTP()
-//{
-//	if (!fileExist("index.html"))
-//		fileSetContent("index.html", "<h3>Please connect to FTP and upload files from folder 'web/build' (details in code)</h3>");
-//
-//	// Start FTP server
-//	ftp.listen(21);
-//	ftp.addUser("me", "123"); // FTP account
-//}
+void startFTP()
+{
+	if (!fileExist("index.html"))
+		fileSetContent("index.html", "<h3>Please connect to FTP and upload files from folder 'web/build' (details in code)</h3>");
+
+	// Start FTP server
+	ftp.listen(21);
+	ftp.addUser("me", "123"); // FTP account
+}
 
 // Will be called when system initialization was completed
 void startServers()
 {
-	//startFTP();
+	startFTP();
 	startWebServer();
 }
 

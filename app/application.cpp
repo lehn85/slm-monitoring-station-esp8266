@@ -7,7 +7,7 @@
 
 // spiff file system location, same as in Makefile-user.mk
 #define SPIFF_START_OFFSET 0x100000
-#define SPIFF_SIZE 196608
+#define SPIFF_SIZE 0x100000
 
 //#define LED_PIN 16
 void ledOnOff(bool on) {
