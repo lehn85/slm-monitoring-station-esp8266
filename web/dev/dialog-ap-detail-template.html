@@ -1,0 +1,56 @@
+﻿<md-dialog ng-cloak>
+    <form>
+        <md-toolbar>
+            <div class="md-toolbar-tools">
+                <h2>{{ap.ssid}}</h2>
+            </div>
+        </md-toolbar>
+        <md-dialog-content style="padding:10px;">
+            <p>Connected: {{isConnected}}</p>
+            <div ng-if="!isConnected">
+                <p>Encryption: {{ap.encryption}}</p>
+                <p>Signal: {{ap.signal}}db</p>
+                <div ng-if="ap.encryption!='OPEN'">
+                    <label>Password:</label>
+                    <input ng-model="settings.password" type="{{showPassword?'text':'password'}}" />
+                    <md-checkbox ng-model="showPassword">
+                        Show password
+                    </md-checkbox>
+                </div>
+            </div>
+            <div ng-if="isConnected">
+                <p style="color:red;">Changes will take effect after device reboots</p>
+                <md-checkbox ng-model="settings.dhcp">
+                    DHCP
+                </md-checkbox>
+                <div>
+                    <label>Address: </label>
+                    <input ng-model="settings.ip" ng-disabled="settings.dhcp" />
+                </div>
+                <div>
+                    <label>Subnet: </label>
+                    <input ng-model="settings.subnetmask" ng-disabled="settings.dhcp" />
+                </div>
+                <div>
+                    <label>Gateway: </label>
+                    <input ng-model="settings.gateway" ng-disabled="settings.dhcp" />
+                </div>
+            </div>
+        </md-dialog-content>
+        <md-divider></md-divider>
+        <md-dialog-actions layout="row">
+            <span flex></span>
+            <md-button class="md-raised md-warn" ng-click="onCancel()">
+                Cancel
+            </md-button>
+            <md-button class="md-raised md-primary" ng-click="onUpdate()"
+                       ng-if="isConnected">
+                Update
+            </md-button>
+            <md-button class="md-raised md-primary" ng-click="onConnect()"
+                       ng-if="!isConnected">
+                Connect
+            </md-button>
+        </md-dialog-actions>
+    </form>
+</md-dialog>

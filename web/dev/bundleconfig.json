@@ -1,0 +1,26 @@
+[
+  {
+    "outputFileName": "angular-material.min.js",
+    "inputFiles": [
+      "angular-material.js"
+    ]
+  },
+  {
+    "outputFileName": "angular-material.min.css",
+    "inputFiles": [
+      "angular-material.css"
+    ]
+  },
+  {
+    "outputFileName": "jquery.min.js",
+    "inputFiles": [
+      "jquery.js"
+    ]
+  },
+  {
+    "outputFileName": "angular.min.js",
+    "inputFiles": [
+      "angular.js"
+    ]
+  }
+]

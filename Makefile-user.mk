@@ -47,4 +47,5 @@ SPI_MODE = dio
 #DISABLE_SPIFFS = 1
 SPIFF_FILES = web/build
 SPIFF_START_OFFSET = 0x100000
+# 1MB for spiff file system
 SPIFF_SIZE     = 1048576

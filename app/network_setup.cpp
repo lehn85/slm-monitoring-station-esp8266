@@ -11,46 +11,76 @@ BssList networks;
 String network, password;
 Timer connectionTimer;
 
-void onIndex(HttpRequest &request, HttpResponse &response)
-{
-	TemplateFileStream *tmpl = new TemplateFileStream("index.html");
-	auto &vars = tmpl->variables();
-	response.sendTemplate(tmpl); // will be automatically deleted
+bool handlePreflight(HttpRequest &request, HttpResponse &response) {
+	// incase of a preflight request (for application/json content)
+	//https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests
+	if (request.getRequestMethod() == "OPTIONS")
+	{
+		debugf("Preflight request. Response OK.");
+		response.setHeader("Access-Control-Allow-Origin", "*");
+		response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+		response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+		response.sendString("");
+		return true;
+	}
+
+	return false;
 }
 
-void onIpConfig(HttpRequest &request, HttpResponse &response)
+void onIndex(HttpRequest &request, HttpResponse &response)
 {
+	response.sendFile("index.html");
+}
+
+void onSetIp(HttpRequest &request, HttpResponse &response)
+{
+	if (handlePreflight(request, response))
+		return;
+
 	if (request.getRequestMethod() == RequestMethod::POST)
 	{
-		AppSettings.dhcp = request.getPostParameter("dhcp") == "1";
-		AppSettings.ip = request.getPostParameter("ip");
-		AppSettings.netmask = request.getPostParameter("netmask");
-		AppSettings.gateway = request.getPostParameter("gateway");
-		debugf("Updating IP settings: %d", AppSettings.ip.isNull());
+		DynamicJsonBuffer jsonBuffer;
+		JsonObject& jsonIn = jsonBuffer.parseObject(request.getBody());
+		String ip = jsonIn["ip"];
+		String subnetmask = jsonIn["subnetmask"];
+		String gateway = jsonIn["gateway"];
+
+		AppSettings.dhcp = jsonIn["dhcp"];// request.getPostParameter("dhcp") == "1";		
+		AppSettings.ip = IPAddress(ip); //request.getPostParameter("ip");
+		AppSettings.netmask = IPAddress(subnetmask);// request.getPostParameter("netmask");
+		AppSettings.gateway = IPAddress(gateway);//request.getPostParameter("gateway");
+		debugf("Updating IP settings: dhcp=%d, ip=%s, subnetmask=%s, gateway=%s", AppSettings.dhcp, ip.c_str(), subnetmask.c_str(), gateway.c_str());
 		AppSettings.save();
+
+		response.setHeader("Access-Control-Allow-Origin", "*");
+		response.sendString("OK");
 	}
+	else {
+		response.badRequest();
+	}
+}
 
-	TemplateFileStream *tmpl = new TemplateFileStream("settings.html");
-	auto &vars = tmpl->variables();
+void onGetIp(HttpRequest &request, HttpResponse &response) {
+	JsonObjectStream* stream = new JsonObjectStream();
+	JsonObject& json = stream->getRoot();
 
-	bool dhcp = WifiStation.isEnabledDHCP();
-	vars["dhcpon"] = dhcp ? "checked='checked'" : "";
-	vars["dhcpoff"] = !dhcp ? "checked='checked'" : "";
-
+	json["ssid"] = WifiStation.getSSID();
+	json["dhcp"] = WifiStation.isEnabledDHCP();
+	json["signal"] = WifiStation.getRssi();
 	if (!WifiStation.getIP().isNull())
 	{
-		vars["ip"] = WifiStation.getIP().toString();
-		vars["netmask"] = WifiStation.getNetworkMask().toString();
-		vars["gateway"] = WifiStation.getNetworkGateway().toString();
+		json["ip"] = WifiStation.getIP().toString();
+		json["subnetmask"] = WifiStation.getNetworkMask().toString();
+		json["gateway"] = WifiStation.getNetworkGateway().toString();
 	}
-	else
-	{
-		vars["ip"] = "192.168.1.77";
-		vars["netmask"] = "255.255.255.0";
-		vars["gateway"] = "192.168.1.1";
+	else {
+		json["ip"] = "";
+		json["subnetmask"] = "";
+		json["gateway"] = "";
 	}
 
-	response.sendTemplate(tmpl); // will be automatically deleted
+	response.setAllowCrossDomainOrigin("*");
+	response.sendJsonObject(stream); // will be automatically deleted
 }
 
 void onFile(HttpRequest &request, HttpResponse &response)
@@ -68,7 +98,19 @@ void onFile(HttpRequest &request, HttpResponse &response)
 	}
 }
 
-void onAjaxNetworkList(HttpRequest &request, HttpResponse &response)
+
+String getBSSID(const BssInfo &bssi)
+{
+	String bssid;
+	for (int i = 0; i < 6; i++)
+	{
+		if (bssi.bssid[i] < 0x10) bssid += "0";
+		bssid += String(bssi.bssid[i], HEX);
+	}
+	return bssid;
+}
+
+void onApiNetworkList(HttpRequest &request, HttpResponse &response)
 {
 	JsonObjectStream* stream = new JsonObjectStream();
 	JsonObject& json = stream->getRoot();
@@ -79,8 +121,21 @@ void onAjaxNetworkList(HttpRequest &request, HttpResponse &response)
 	json["connected"] = connected;
 	if (connected)
 	{
-		// Copy full string to JSON buffer memory
-		json["network"] = WifiStation.getSSID();
+		JsonObject& nw = json.createNestedObject("network");
+		nw["ssid"] = WifiStation.getSSID();
+		nw["signal"] = WifiStation.getRssi();
+		nw["dhcp"] = WifiStation.isEnabledDHCP();
+		if (!WifiStation.getIP().isNull())
+		{
+			nw["ip"] = WifiStation.getIP().toString();
+			nw["subnetmask"] = WifiStation.getNetworkMask().toString();
+			nw["gateway"] = WifiStation.getNetworkGateway().toString();
+		}
+		else {
+			nw["ip"] = "";
+			nw["subnetmask"] = "";
+			nw["gateway"] = "";
+		}
 	}
 
 	JsonArray& netlist = json.createNestedArray("available");
@@ -90,13 +145,14 @@ void onAjaxNetworkList(HttpRequest &request, HttpResponse &response)
 		JsonObject &item = netlist.createNestedObject();
 		item["id"] = (int)networks[i].getHashId();
 		// Copy full string to JSON buffer memory
-		item["title"] = networks[i].ssid;
+		item["ssid"] = networks[i].ssid;
 		item["signal"] = networks[i].rssi;
 		item["encryption"] = networks[i].getAuthorizationMethodName();
+		item["bssid"] = getBSSID(networks[i]);
 	}
 
 	response.setAllowCrossDomainOrigin("*");
-	response.sendJsonObject(stream);
+	response.sendJsonObject(stream);//stream automatic deleted afterward
 }
 
 void makeConnection()
@@ -111,13 +167,21 @@ void makeConnection()
 	network = ""; // task completed
 }
 
-void onAjaxConnect(HttpRequest &request, HttpResponse &response)
+void onApiConnect(HttpRequest &request, HttpResponse &response)
 {
+	if (handlePreflight(request, response))
+		return;
+
+	DynamicJsonBuffer jsonBuffer;
+	JsonObject& jsonIn = jsonBuffer.parseObject(request.getBody());
+
+	String curNet = jsonIn["ssid"];
+	String curPass = jsonIn["password"];
+
+	debugf("received ssid=%s; password=%s", curNet.c_str(), curPass.c_str());
+
 	JsonObjectStream* stream = new JsonObjectStream();
 	JsonObject& json = stream->getRoot();
-
-	String curNet = request.getPostParameter("network");
-	String curPass = request.getPostParameter("password");
 
 	bool updating = curNet.length() > 0 && (WifiStation.getSSID() != curNet || WifiStation.getPassword() != curPass);
 	bool connectingNow = WifiStation.getConnectionStatus() == eSCS_Connecting || network.length() > 0;
@@ -149,17 +213,27 @@ void onAjaxConnect(HttpRequest &request, HttpResponse &response)
 	if (!updating && !connectingNow && WifiStation.isConnectionFailed())
 		json["error"] = WifiStation.getConnectionStatusName();
 
-	response.setAllowCrossDomainOrigin("*");
-	response.sendJsonObject(stream);
+	response.setHeader("Access-Control-Allow-Origin", "*");
+	response.sendJsonObject(stream);//stream automatic deleted afterward
+}
+
+void onApiReboot(HttpRequest &request, HttpResponse &response) {
+	response.sendString("Rebooting ...");
+	System.restart();
 }
 
 void startWebServer()
 {
 	server.listen(80);
+	// index
 	server.addPath("/", onIndex);
-	server.addPath("/ipconfig", onIpConfig);
-	server.addPath("/ajax/get-networks", onAjaxNetworkList);
-	server.addPath("/ajax/connect", onAjaxConnect);
+	// restful api
+	server.addPath("/api/setip", onSetIp);
+	server.addPath("/api/getip", onGetIp);
+	server.addPath("/api/getnetworks", onApiNetworkList);
+	server.addPath("/api/connect", onApiConnect);
+	server.addPath("/api/reboot", onApiReboot);
+	// others
 	server.setDefaultHandler(onFile);
 }
 
