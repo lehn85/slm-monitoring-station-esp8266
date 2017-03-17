@@ -82,7 +82,7 @@ void initSensorSolar() {
 }
 
 void prepareReadSolar1() {
-	debugf("Prepare solar panel load 1, wait 5s");
+	debugf("Prepare solar panel load 1, wait 5s",0);
 	digitalWrite(SWITCH_LOAD_1, HIGH);
 	digitalWrite(SWITCH_LOAD_2, LOW);
 	delayTimer.initializeMs(DELAY_FOR_STABLIZING_SOLAR_PANEL, readSolar1).startOnce();
@@ -249,8 +249,8 @@ void STAGotIP(IPAddress ip, IPAddress mask, IPAddress gateway)
 void init()
 {
 	//spiffs_mount(); // Mount file system, in order to work with files
-    // mount manually (same as to makefile-user.mk) 0x40200000 is address start of SPI flash for esp8266
-	spiffs_mount_manual(0x40200000 + SPIFF_START_OFFSET, SPIFF_SIZE);
+    // mount manually (same as to makefile-user.mk) if Sming ver <3.1 then +0x40200000 is address start of SPI flash for esp8266
+	spiffs_mount_manual(SPIFF_START_OFFSET, SPIFF_SIZE);
 
 	Serial.begin(SERIAL_BAUD_RATE); // 115200 by default
 	Serial.systemDebugOutput(true); // Allow debug output to serial

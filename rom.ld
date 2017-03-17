@@ -7,7 +7,7 @@ MEMORY
   iram1_0_seg :                         org = 0x40100000, len = 0x8000
   irom0_0_seg :                         org = 0x40280000, len = (1M - 0x80000)
 }
-
+/* The following content is copied from common.ld in Sming/compiler/ld */
 PHDRS
 {
   dport0_0_phdr PT_LOAD;

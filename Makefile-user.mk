@@ -3,9 +3,8 @@
 ## Uncomment and change examples:
 
 ## memory mapping customize
-MAIN_OFFSET ?= 0x00000
-MAIN_CAP ?= 524288
-SDK_OFFSET ?= 0x80000
+IMAGE_MAIN = 0x00000.bin
+IMAGE_SDK ?= 0x80000.bin
 SPI_SIZE = 4M
 LD_SCRIPT = rom.ld
 

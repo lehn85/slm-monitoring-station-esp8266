@@ -10,10 +10,23 @@ FTPServer ftp;
 BssList networks;
 String network, password;
 Timer connectionTimer;
+enum ConnectionStatus {
+	Not_Connected = 0,
+	Connecting = 1,
+	Connected = 2,
+	ConnectionFailed = 3
+};
+ConnectionStatus connStatus = ConnectionStatus::Not_Connected;
 
+//declare functions
+void networkScanCompleted(bool succeeded, BssList list);
+void onSTAconnected();
+void onSTAfailed();
+
+// Handle a preflight request
+// Return true if it is a preflight request and is handled
+// https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests
 bool handlePreflight(HttpRequest &request, HttpResponse &response) {
-	// incase of a preflight request (for application/json content)
-	//https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Preflighted_requests
 	if (request.getRequestMethod() == "OPTIONS")
 	{
 		debugf("Preflight request. Response OK.");
@@ -52,6 +65,10 @@ void onSetIp(HttpRequest &request, HttpResponse &response)
 		debugf("Updating IP settings: dhcp=%d, ip=%s, subnetmask=%s, gateway=%s", AppSettings.dhcp, ip.c_str(), subnetmask.c_str(), gateway.c_str());
 		AppSettings.save();
 
+		// belows code can only be run in init(), meaning require device reboot
+		//if (!AppSettings.dhcp && !AppSettings.ip.isNull())
+		//	WifiStation.setIP(AppSettings.ip, AppSettings.netmask, AppSettings.gateway);
+
 		response.setHeader("Access-Control-Allow-Origin", "*");
 		response.sendString("OK");
 	}
@@ -64,19 +81,26 @@ void onGetIp(HttpRequest &request, HttpResponse &response) {
 	JsonObjectStream* stream = new JsonObjectStream();
 	JsonObject& json = stream->getRoot();
 
-	json["ssid"] = WifiStation.getSSID();
-	json["dhcp"] = WifiStation.isEnabledDHCP();
-	json["signal"] = WifiStation.getRssi();
-	if (!WifiStation.getIP().isNull())
-	{
-		json["ip"] = WifiStation.getIP().toString();
-		json["subnetmask"] = WifiStation.getNetworkMask().toString();
-		json["gateway"] = WifiStation.getNetworkGateway().toString();
-	}
-	else {
-		json["ip"] = "";
-		json["subnetmask"] = "";
-		json["gateway"] = "";
+	bool connected = WifiStation.isConnected();
+	json["enable"] = WifiStation.isEnabled();
+	json["connectionStatus"] = (int)connStatus;
+	json["connected"] = connected;
+
+	if (connected) {
+		json["ssid"] = WifiStation.getSSID();
+		json["dhcp"] = WifiStation.isEnabledDHCP();
+		json["signal"] = WifiStation.getRssi();
+		if (!WifiStation.getIP().isNull())
+		{
+			json["ip"] = WifiStation.getIP().toString();
+			json["subnetmask"] = WifiStation.getNetworkMask().toString();
+			json["gateway"] = WifiStation.getNetworkGateway().toString();
+		}
+		else {
+			json["ip"] = "";
+			json["subnetmask"] = "";
+			json["gateway"] = "";
+		}
 	}
 
 	response.setAllowCrossDomainOrigin("*");
@@ -98,7 +122,6 @@ void onFile(HttpRequest &request, HttpResponse &response)
 	}
 }
 
-
 String getBSSID(const BssInfo &bssi)
 {
 	String bssid;
@@ -115,10 +138,12 @@ void onApiNetworkList(HttpRequest &request, HttpResponse &response)
 	JsonObjectStream* stream = new JsonObjectStream();
 	JsonObject& json = stream->getRoot();
 
-	json["status"] = (bool)true;
-
 	bool connected = WifiStation.isConnected();
+	json["enable"] = WifiStation.isEnabled();
+	json["connectionStatus"] = (int)connStatus;
 	json["connected"] = connected;
+
+	// connected AP info
 	if (connected)
 	{
 		JsonObject& nw = json.createNestedObject("network");
@@ -138,6 +163,7 @@ void onApiNetworkList(HttpRequest &request, HttpResponse &response)
 		}
 	}
 
+	// available list
 	JsonArray& netlist = json.createNestedArray("available");
 	for (int i = 0; i < networks.count(); i++)
 	{
@@ -152,7 +178,7 @@ void onApiNetworkList(HttpRequest &request, HttpResponse &response)
 	}
 
 	response.setAllowCrossDomainOrigin("*");
-	response.sendJsonObject(stream);//stream automatic deleted afterward
+	response.sendJsonObject(stream);//stream automatic deleted afterward	
 }
 
 void makeConnection()
@@ -165,6 +191,17 @@ void makeConnection()
 	AppSettings.save();
 
 	network = ""; // task completed
+
+	WifiStation.connect();
+
+	connStatus = ConnectionStatus::Connecting;
+	WifiStation.waitConnection(onSTAconnected, 15, onSTAfailed);
+}
+
+void onApiScanNetworks(HttpRequest &request, HttpResponse &response) {
+	WifiStation.startScan(networkScanCompleted);
+	response.setHeader("Access-Control-Allow-Origin", "*");
+	response.sendString("Scanning");
 }
 
 void onApiConnect(HttpRequest &request, HttpResponse &response)
@@ -180,7 +217,7 @@ void onApiConnect(HttpRequest &request, HttpResponse &response)
 
 	debugf("received ssid=%s; password=%s", curNet.c_str(), curPass.c_str());
 
-	JsonObjectStream* stream = new JsonObjectStream();
+	/*JsonObjectStream* stream = new JsonObjectStream();
 	JsonObject& json = stream->getRoot();
 
 	bool updating = curNet.length() > 0 && (WifiStation.getSSID() != curNet || WifiStation.getPassword() != curPass);
@@ -211,10 +248,15 @@ void onApiConnect(HttpRequest &request, HttpResponse &response)
 	}
 
 	if (!updating && !connectingNow && WifiStation.isConnectionFailed())
-		json["error"] = WifiStation.getConnectionStatusName();
+		json["error"] = WifiStation.getConnectionStatusName();*/
+
+	network = curNet;
+	password = curPass;
+	connectionTimer.initializeMs(1000, makeConnection).startOnce();
 
 	response.setHeader("Access-Control-Allow-Origin", "*");
-	response.sendJsonObject(stream);//stream automatic deleted afterward
+	response.sendString("Connecting");
+	//response.sendJsonObject(stream);//stream automatic deleted afterward
 }
 
 void onApiReboot(HttpRequest &request, HttpResponse &response) {
@@ -227,10 +269,11 @@ void startWebServer()
 	server.listen(80);
 	// index
 	server.addPath("/", onIndex);
-	// restful api
+	// api to control server, assuming at one time only one client
 	server.addPath("/api/setip", onSetIp);
 	server.addPath("/api/getip", onGetIp);
-	server.addPath("/api/getnetworks", onApiNetworkList);
+	server.addPath("/api/scannetworks", onApiScanNetworks);//call scan, but don't know when it finishes
+	server.addPath("/api/getnetworks", onApiNetworkList);//client should call scan, then wait 2-5s then call getnetworks to get result
 	server.addPath("/api/connect", onApiConnect);
 	server.addPath("/api/reboot", onApiReboot);
 	// others
@@ -267,11 +310,13 @@ void networkScanCompleted(bool succeeded, BssList list)
 
 void onSTAconnected() {
 	debugf("STA connected");
+	connStatus = ConnectionStatus::Connected;
 }
 
 void onSTAfailed() {
 	debugf("STA failed to connect");
 	WifiStation.disconnect();//stop station from auto reconnect
+	connStatus = ConnectionStatus::ConnectionFailed;
 }
 
 void startWifiStationFromSettings() {
@@ -286,10 +331,8 @@ void startWifiStationFromSettings() {
 		if (!AppSettings.dhcp && !AppSettings.ip.isNull())
 			WifiStation.setIP(AppSettings.ip, AppSettings.netmask, AppSettings.gateway);
 	}
-	else {
-		debugf("Appsettings not exist, use default maybe");
-		WifiStation.config("bullshit", "sss", true, true);
-	}
+
+	connStatus = ConnectionStatus::Connecting;
 	WifiStation.waitConnection(onSTAconnected, 15, onSTAfailed);
 }
 
@@ -297,6 +340,7 @@ void initSTAmode()
 {
 	startWifiStationFromSettings();
 
+	// first scan
 	WifiStation.startScan(networkScanCompleted);
 
 	// Start AP for configuration
