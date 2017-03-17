@@ -82,7 +82,7 @@ void initSensorSolar() {
 }
 
 void prepareReadSolar1() {
-	debugf("Prepare solar panel load 1, wait 5s",0);
+	debugf("Prepare solar panel load 1, wait 5s");
 	digitalWrite(SWITCH_LOAD_1, HIGH);
 	digitalWrite(SWITCH_LOAD_2, LOW);
 	delayTimer.initializeMs(DELAY_FOR_STABLIZING_SOLAR_PANEL, readSolar1).startOnce();
