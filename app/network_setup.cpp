@@ -215,40 +215,7 @@ void onApiConnect(HttpRequest &request, HttpResponse &response)
 	String curNet = jsonIn["ssid"];
 	String curPass = jsonIn["password"];
 
-	debugf("received ssid=%s; password=%s", curNet.c_str(), curPass.c_str());
-
-	/*JsonObjectStream* stream = new JsonObjectStream();
-	JsonObject& json = stream->getRoot();
-
-	bool updating = curNet.length() > 0 && (WifiStation.getSSID() != curNet || WifiStation.getPassword() != curPass);
-	bool connectingNow = WifiStation.getConnectionStatus() == eSCS_Connecting || network.length() > 0;
-
-	if (updating && connectingNow)
-	{
-		debugf("wrong action: %s %s, (updating: %d, connectingNow: %d)", network.c_str(), password.c_str(), updating, connectingNow);
-		json["status"] = (bool)false;
-		json["connected"] = (bool)false;
-	}
-	else
-	{
-		json["status"] = (bool)true;
-		if (updating)
-		{
-			network = curNet;
-			password = curPass;
-			debugf("CONNECT TO: %s %s", network.c_str(), password.c_str());
-			json["connected"] = false;
-			connectionTimer.initializeMs(1200, makeConnection).startOnce();
-		}
-		else
-		{
-			json["connected"] = WifiStation.isConnected();
-			debugf("Network already selected. Current status: %s", WifiStation.getConnectionStatusName());
-		}
-	}
-
-	if (!updating && !connectingNow && WifiStation.isConnectionFailed())
-		json["error"] = WifiStation.getConnectionStatusName();*/
+	debugf("received ssid=%s; password=%s", curNet.c_str(), curPass.c_str());	
 
 	network = curNet;
 	password = curPass;

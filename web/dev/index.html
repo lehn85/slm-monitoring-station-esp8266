@@ -21,11 +21,12 @@
 </head>
 <body ng-controller="appController">
     <div class="container">
-        <div class="header" layout="row">
+        <div class="header" layout="column">
             <h3>Network settings web interface - by Ngo Phuong Le</h3>
-        </div>
+            <h4 style="color:red;" ng-if="notification">{{notification}}</h4>
+        </div>        
 
-        <md-toolbar>
+        <md-toolbar ng-if="!rebooting">
             <div class="md-toolbar-tools">
                 <h3>Networks</h3>
                 <span flex="" class="flex"></span>
@@ -33,7 +34,7 @@
                 <md-button class="md-raised md-warn" ng-click="onRebootDevice()">Reboot</md-button>
             </div>
         </md-toolbar>
-        <md-list class="network-list">
+        <md-list class="network-list" ng-if="!rebooting">
             <md-list-item ng-click="onClick(nw)"
                           ng-repeat="nw in networks"
                           class="network-row"

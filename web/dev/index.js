@@ -10,6 +10,8 @@
         var apiConnect = '/api/connect';
         var apiReboot = '/api/reboot';
         var apiSetip = '/api/setip';
+        var apiGetip = '/api/getip';
+        var apiScanNetworks = '/api/scannetworks';
         // this line of code to prevent angularjs trigger preflight (OPTIONS) when send with content-type=application/json
         //$http.defaults.headers.post["Content-Type"] = "text/plain"
 
@@ -59,6 +61,8 @@
                 })
             .then(function (response) {
                 console.debug(response);
+                $scope.notification = "Config changed, requires restarting to apply";
+                $scope.$applyAsync();
             },
             function (ex) {
                 console.error(ex);
@@ -74,10 +78,33 @@
                     password: password,
                 })
             .then(function (response) {
-                console.debug(response);
+                console.debug(response);                
             },
             function (ex) {
                 console.error(ex);
+            });
+            showDialogWait(ssid);
+        }
+
+        function showDialogWait(ssid) {
+            $mdDialog.show({
+                controller: DialogWaitController,
+                templateUrl: 'dialog-wait-template.html',
+                parent: angular.element(document.body),//id (in html)
+                clickOutsideToClose: false,
+                locals: {
+                    ssid: ssid,
+                }
+            })
+            .then(
+            function (result) {
+                console.debug(result);
+                refreshNetworks();
+            },
+            function () {
+                console.debug("Dialog cancel");
+                refreshNetworks();
+                $scope.notification = "Cannot connect to " + ssid;
             });
         }
 
@@ -112,7 +139,7 @@
                 console.debug(result);
                 // a connected AP -> ok ->
                 if (result.update) {
-                    //get data from result.settings: dhcp, ip, subnetmask, gateway
+                    //get data from result.settings: dhcp, ip, subnetmask, gateway                    
                     doSetIp(result.settings.dhcp, result.settings.ip, result.settings.subnetmask, result.settings.gateway);
                 }
                 else if (result.connect) {
@@ -126,7 +153,16 @@
         }
 
         $scope.onRefreshNetworks = function () {
-            refreshNetworks();
+            console.debug("Rescan");
+            $http.get(root + apiScanNetworks)
+            .then(
+            function (response) {
+                console.debug("Wait 5s for scan to finish and get data");
+                setTimeout(refreshNetworks, 5000);                
+            },
+            function (ex) {
+                console.error(ex);
+            });            
         }
 
         $scope.onRebootDevice = function () {
@@ -140,13 +176,16 @@
             .then(function () {
                 console.debug("Reboot clicked");
                 doReboot();
+                $scope.notification = "Device is rebooting, please wait for a few seconds and refresh page";
+                $scope.rebooting = true;
+                $scope.$applyAsync();
             },
             function () {
                 console.debug("Cancel clicked");
             });
         }
 
-        //Dialog AP detail
+        // Dialog AP detail
         function DialogAPDetailController($scope, $mdDialog, ap, connected) {
             $scope.ap = ap;
             $scope.settings = {
@@ -190,6 +229,37 @@
             $scope.onCancel = function () {
                 $mdDialog.cancel(); // raise cancel
             };
+        }
+
+        // Dialog Wait
+        function DialogWaitController($scope, $mdDialog, ssid) {
+            $scope.title = "Connecting to " + ssid;
+            $scope.content = "Please wait ...";
+
+            $scope.onCancel = function () {
+                $mdDialog.cancel(); // raise cancel
+            };
+
+            function checkConnection() {
+                $http.get(root + apiGetip)
+                 .then(
+                 function (response) {
+                     var data = response.data;
+                     if (data.connectionStatus == 2)
+                         $mdDialog.hide();//ok
+                     else if (data.connectionStatus == 3 || data.connectionStatus == 0)//not connected or failed
+                         $mdDialog.cancel();//cancel
+                     else {
+                         setTimeout(checkConnection, 1000);//check again after 1s
+                     }
+                 },
+                 function (ex) {
+                     console.error(ex);
+                     setTimeout(checkConnection, 1000);//check again after 1s
+                 });
+            }
+
+            setTimeout(checkConnection, 3000);//check after 2s
         }
 
 

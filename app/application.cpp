@@ -292,11 +292,7 @@ void init()
 	mqtt = new MyMQTTClient();
 	mqtt->setMqttOnSentListener(onMQTTSent);//when sent to mqtt broker successfully
 
-	//connect to wifi
-	//WifiStation.enable(true);
-	//WifiStation.config(WIFI_SSID, WIFI_PWD, true, true);
-	//// static ip if needed
-	//WifiStation.setIP(IPAddress(10, 1, 10, 198), IPAddress(255, 255, 255, 0), IPAddress(10, 1, 10, 1));
+	//connect to wifi	
 	// load settings and start
 	startWifiStationFromSettings();
 	// events when connected
