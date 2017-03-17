@@ -380,3 +380,18 @@
 .error{
     margin-top: 10px;
 }
+
+.connect-button-group{
+    margin:10px;
+}
+
+.network-list {
+    width: 100%;
+    overflow-y: auto;
+    background-color: #ffffff;
+    border:1px solid gray;
+}
+
+.network-row {    
+    border-bottom: 1px dotted #bbb;
+}    

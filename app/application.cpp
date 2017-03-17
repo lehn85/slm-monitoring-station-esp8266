@@ -253,7 +253,7 @@ void init()
 	spiffs_mount_manual(SPIFF_START_OFFSET, SPIFF_SIZE);
 
 	Serial.begin(SERIAL_BAUD_RATE); // 115200 by default
-	Serial.systemDebugOutput(true); // Allow debug output to serial
+	Serial.systemDebugOutput(false); // Allow debug output to serial
 
 	debugf("Initializing...");
 
