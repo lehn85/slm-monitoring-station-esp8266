@@ -59,8 +59,8 @@ void prepareReadSolar2();
 void readSolar2();
 void readHT();
 
-#define SWITCH_LOAD_1 5
-#define SWITCH_LOAD_2 4
+#define SWITCH_LOAD_1 5 //D1 GPIO5
+#define SWITCH_LOAD_2 4 //D2 GPIO4
 const int A0min = 4;
 const int A0max = 1024;
 const float r1 = 1000;
