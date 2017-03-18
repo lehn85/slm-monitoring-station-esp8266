@@ -22,6 +22,6 @@ Program uses [Sming framework](https://github.com/SmingHub/Sming).
 But I modified some in makefile (mostly modified memory mapping and added more command line options), and forked here: https://github.com/lehn85/Sming.
 
 # Schematic
-![Schematic](/Schematic.png)
+![Schematic](/schematic.png)
 
 Measuring solar panel requires varying load. That is why 2 MOSFET n-channel are included: to switch between load 1000 ohm and 100 ohm. After measuring voltage for each load, optimal load (a resistance value that gets the most power out of solar panel) is calculated by interpolation. I may write detail when I have time.
