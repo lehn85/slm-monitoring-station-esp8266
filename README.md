@@ -17,9 +17,13 @@ After sending data, esp8266 go to deep sleep for 5 minutes.
 ### Setup mode
 put some pictures here maybe -))
 # Dependencies
+#### Esp8266
 Program uses [Sming framework](https://github.com/SmingHub/Sming).
 
 But I modified some in makefile (mostly modified memory mapping and added more command line options), and forked here: https://github.com/lehn85/Sming.
+#### Front-end (web interface for setup mode)
+- Angularjs
+- Angularjs material
 
 # Schematic
 ![Schematic](/schematic.png)
