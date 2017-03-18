@@ -4,6 +4,7 @@
 #include <Libraries/DHT/DHT.h>
 #include <mqtt.h>
 #include <network_setup.h>
+#include <HttpClientForMySite.h>
 
 // spiff file system location, same as in Makefile-user.mk
 #define SPIFF_START_OFFSET 0x100000
@@ -35,11 +36,16 @@ void ledOnOff(bool on) {
 #define API_WRITE_KEY "key-to-access-nodejs-webserver"
 #endif // !API_WRITE_KEY
 
+HttpClientForMySite httpClient("http://letm-solar-panel-monitor.herokuapp.com/data/", API_WRITE_KEY);
+void onHttpClientCompleted(HttpClient& client, bool successful);
+
 #define SETUP_PIN 12 //D6 - GPIO12
 
 DHT dht(DHT_SENSOR_PIN);
 Timer timerReadSensor;
 Timer delayTimer;
+Timer waitHttpClientTimer;
+int waitHttpClientCount = 0;
 int readcount = 0;
 int retry_mqtt_broker = 0;
 
@@ -182,9 +188,13 @@ void publishSensor() {
 
 	String msg;
 	root.printTo(msg);
+
+	waitHttpClientCount = 0;//reset wait count
+	httpClient.postData(msg, onHttpClientCompleted);
+
 	// if mqtt broker is connected, publish message
 	if (mqtt->getConnectionState() == eTCS_Connected) {
-		mqtt->publishMessage(MQTT_TOPIC, msg);
+		mqtt->publishMessage(MQTT_TOPIC, msg);	
 	}
 	else { //else-> sleep, try again or try start		
 #ifdef USE_DEEPSLEEP
@@ -210,7 +220,20 @@ void publishSensor() {
 
 }
 
+void onHttpClientCompleted(HttpClient& client, bool successful) {
+	Serial.printf("HttpClient success=%d\n", successful);
+}
+
 void onMQTTSent() {
+	// wait for httpClient to finish (only for 5*2=10s)
+	if (waitHttpClientCount<5 && httpClient.isProcessing()) 
+	{
+		debugf("Wait for httpClient count=%d", waitHttpClientCount);
+		waitHttpClientTimer.initializeMs(2000, onMQTTSent);
+		waitHttpClientCount++;
+	}
+	else debugf("httpClient seems finished processing.");
+
 #ifdef USE_DEEPSLEEP
 	debugf("Go to deep sleep for sometime %d ms", DELAY_MEASUREMENT);
 	System.deepSleep(DELAY_MEASUREMENT, eDSO_RF_CAL_BY_INIT_DATA);
@@ -253,7 +276,7 @@ void init()
 	spiffs_mount_manual(SPIFF_START_OFFSET, SPIFF_SIZE);
 
 	Serial.begin(SERIAL_BAUD_RATE); // 115200 by default
-	Serial.systemDebugOutput(false); // Allow debug output to serial
+	Serial.systemDebugOutput(true); // Allow debug output to serial
 
 	debugf("Initializing...");
 

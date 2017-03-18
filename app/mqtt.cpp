@@ -44,7 +44,7 @@ void MyMQTTClient::publishMessage(String topic, String msg) {
 }
 
 void MyMQTTClient::onReadyToSendData(TcpConnectionEvent e) {
-	// if just publish?, go to sleep for 50s (take into account 10s measure solar panel voltage)
+	// raise event OnSent 
 	if (justPublish && e == eTCE_Sent) {
 		justPublish = false;		
 		if (mqttOnSent != 0)
